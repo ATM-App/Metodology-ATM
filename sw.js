@@ -1,4 +1,4 @@
-const CACHE_NAME = 'adn-keeper-v1';
+const CACHE_NAME = 'metodology-atm-v1';
 
 // Omitimos cacheo estricto para que Firebase trabaje siempre en tiempo real
 self.addEventListener('install', (event) => {
