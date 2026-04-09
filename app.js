@@ -25,7 +25,6 @@ const DEFAULT_USERS = {
 
 let SYSTEM_USERS = JSON.parse(localStorage.getItem('atleti_system_users')) || DEFAULT_USERS;
 
-// Sincronización de Usuarios en Tiempo Real
 database.ref('system_users').on('value', (snapshot) => {
     if(snapshot.val()) {
         SYSTEM_USERS = snapshot.val();
@@ -428,7 +427,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             semanaHTML += `</div></div>`; calendarioContainer.innerHTML += semanaHTML;
         }
-        if(window.pintarDatosGuardados) window.pintarDatosGuardados();
+        window.pintarDatosGuardados();
     };
     selectCiclo.addEventListener('change', (e) => window.generarCalendario(e.target.value));
 
@@ -471,6 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gesto && bloqueValue) {
             let fechaGuardar = new Date(diaYsemanaActual + "T12:00:00"); fechaGuardar.setDate(fechaGuardar.getDate() + 1); let isoManana = toLocalISO(fechaGuardar); 
             let partidoMañana = (appDB.fechas[isoManana] && appDB.fechas[isoManana].evento === 'partido'); const analisis = analizarGesto(gesto, bloqueValue);
+            // Protocolo MD-1 Adaptado a Jugadores
             if(partidoMañana && analisis.cargaTen === 3) { mostrarAlerta("🚨 ALERTA MÉDICA: PROTOCOLO MD-1", `Mañana hay partido. Prohibido introducir tareas de altísima intensidad neuromuscular o metabólica (${gesto}) hoy.`, true, true); return; }
             let repeticiones = parseInt(appDB.statsGestos[gesto]) || 0; let limite = document.getElementById('select-categoria').value === 'rendimiento' ? 4 : 8;
             if (repeticiones >= limite) { if (alternativasInteligentes[gesto]) { mostrarSmartCard(gesto, alternativasInteligentes[gesto]); } else { mostrarAlerta("⚠️ Límite", `Has repetido ${gesto} ${repeticiones} veces.`, true); } return; }
@@ -709,121 +709,88 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 7. EXPORTACIÓN A PDF (LA VERSIÓN ESTABLE CON PORTADA AZUL + SIN HOJAS EN BLANCO)
+    // 7. EXPORTACIÓN A PDF - CÓDIGO ORIGINAL QUE FUNCIONA
     // ==========================================
+    
     document.getElementById('btn-export-calendario').addEventListener('click', () => { 
-        mostrarAlerta("⏳ Generando Informe", "Preparando PDF...", false);
+        mostrarAlerta("⏳ Generando Informe", "Construyendo documento PDF premium...", false);
         
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
         const tipoCiclo = document.getElementById('select-ciclo').value;
         let fechaInicioIteracion, numSemanas = 0;
         let txtCicloPortada = "";
-        let fechaFinIteracion;
 
-        if (tipoCiclo === 'micro') { 
-            fechaInicioIteracion = getMonday(hoy); 
-            numSemanas = 1; 
-            txtCicloPortada = "MICROCICLO SEMANAL"; 
-            fechaFinIteracion = new Date(fechaInicioIteracion);
-            fechaFinIteracion.setDate(fechaFinIteracion.getDate() + 6);
-        } 
-        else if (tipoCiclo === 'meso') { 
-            let primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-            fechaInicioIteracion = getPrimerLunesMeso(primerDiaMes); 
-            let ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-            let diffTime = Math.abs(ultimoDiaMes - fechaInicioIteracion);
-            numSemanas = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-            txtCicloPortada = "MESOCICLO MENSUAL"; 
-            fechaFinIteracion = new Date(fechaInicioIteracion);
-            fechaFinIteracion.setDate(fechaFinIteracion.getDate() + (numSemanas * 7) - 1);
-        } 
-        else if (tipoCiclo === 'macro') { 
-            let startYear = hoy.getMonth() >= 7 ? hoy.getFullYear() : hoy.getFullYear() - 1; 
-            let dAgosto = new Date(startYear, 7, 1); 
-            fechaInicioIteracion = getPrimerLunesMeso(dAgosto); 
-            let dJunioNext = new Date(startYear + 1, 6, 0); 
-            let diffTime = Math.abs(dJunioNext - fechaInicioIteracion);
-            numSemanas = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
-            txtCicloPortada = "MACROCICLO ANUAL"; 
-            fechaFinIteracion = new Date(fechaInicioIteracion);
-            fechaFinIteracion.setDate(fechaFinIteracion.getDate() + (numSemanas * 7) - 1);
-        }
-
-        const strInicio = `${fechaInicioIteracion.getDate()} DE ${nombresMesesPdf[fechaInicioIteracion.getMonth()].toUpperCase()}`;
-        const strFin = `${fechaFinIteracion.getDate()} DE ${nombresMesesPdf[fechaFinIteracion.getMonth()].toUpperCase()}`;
-        const txtRangoFechas = `DEL ${strInicio} AL ${strFin}`;
+        if (tipoCiclo === 'micro') { fechaInicioIteracion = getMonday(hoy); numSemanas = 1; txtCicloPortada = "MICROCICLO SEMANAL"; } 
+        else if (tipoCiclo === 'meso') { let primerLunes = getPrimerLunesMeso(hoy); let ultimoLunes = getUltimoLunesMeso(hoy); fechaInicioIteracion = new Date(primerLunes); numSemanas = Math.round((ultimoLunes - primerLunes) / (7 * 24 * 60 * 60 * 1000)) + 1; txtCicloPortada = "MESOCICLO MENSUAL"; } 
+        else if (tipoCiclo === 'macro') { let startYear = hoy.getMonth() >= 6 ? hoy.getFullYear() : hoy.getFullYear() - 1; let dAgosto = new Date(startYear, 7, 1); fechaInicioIteracion = getPrimerLunesMeso(dAgosto); let dJunio = new Date(startYear + 1, 5, 30); let ultimoLunes = getUltimoLunesMeso(dJunio); numSemanas = Math.round((ultimoLunes - fechaInicioIteracion) / (7 * 24 * 60 * 60 * 1000)) + 1; txtCicloPortada = "MACROCICLO ANUAL"; }
 
         let fechasPartidos = []; 
         for (const [f, d] of Object.entries(appDB.fechas)) { if(d.evento === 'partido') fechasPartidos.push(new Date(f + "T12:00:00").getTime()); }
 
-        let html = `<div style="font-family: Arial, Helvetica, sans-serif; color: #333; width: 100%;">`;
+        let html = `<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; background: #fff; width: 297mm; min-height: 210mm;">`;
         
-        // --- PORTADA PREMIUM (Fondo Azul Sólido) ---
-        // Se cambió height: 210mm por 209mm para evitar overflow y hojas en blanco
+        // Lógica de fechas
+        const mesesTexto = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+        let dFinCiclo = new Date(fechaInicioIteracion);
+        dFinCiclo.setDate(dFinCiclo.getDate() + (numSemanas * 7) - 1);
+        let strFechas = `DEL ${fechaInicioIteracion.getDate()} DE ${mesesTexto[fechaInicioIteracion.getMonth()]} AL ${dFinCiclo.getDate()} DE ${mesesTexto[dFinCiclo.getMonth()]}`;
+
+        // --- PORTADA PREMIUM ESTABLE (COLOR SOLIDO AZUL Y ESCUDO) ---
         html += `
-        <div style="width: 297mm; height: 209mm; background-color: #003366; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; box-sizing: border-box; text-align: center; border-bottom: 20px solid #CB3524;">
+        <div style="width: 297mm; height: 205mm; background-color: #003366; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; position: relative; overflow: hidden; page-break-after: always; box-sizing: border-box; text-align: center; border-bottom: 25px solid #CB3524;">
             
-            <img src="ESCUDO_ATM.png" style="height: 250px; margin-bottom: 40px;" onerror="this.style.display='none'">
+            <img src="ESCUDO_ATM.png" style="height: 220px; margin-bottom: 40px; z-index: 2;">
             
-            <h1 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 50px; font-weight: 900; margin: 0; letter-spacing: 2px; color: #ffffff; text-transform: uppercase;">PLANIFICACIÓN METODOLÓGICA</h1>
+            <h1 style="font-size: 55px; font-weight: 900; margin: 0; letter-spacing: 3px; z-index: 2;">PLANIFICACIÓN METODOLÓGICA</h1>
             
-            <div style="height: 6px; width: 150px; background-color: #FF9800; margin: 30px auto;"></div>
+            <div style="height: 5px; width: 150px; background-color: #FF9800; margin: 25px auto; z-index: 2;"></div>
             
-            <h2 style="font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 600; margin: 0; color: #e0e0e0; letter-spacing: 6px; text-transform: uppercase;">METODOLOGY ATM</h2>
+            <h2 style="font-size: 28px; font-weight: 300; margin: 0; z-index: 2; color: #f0f0f0; letter-spacing: 5px;">METODOLOGY ATM</h2>
             
-            <div style="margin-top: 50px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 40px; padding: 20px 60px; background-color: rgba(0, 0, 0, 0.2);">
-                <span style="font-family: 'Arial Black', Impact, sans-serif; font-size: 24px; font-weight: 900; color: #FF9800; letter-spacing: 2px; display: block; text-transform: uppercase;">${txtCicloPortada}</span>
-                <span style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff; letter-spacing: 1px; margin-top: 8px; display: block; text-transform: uppercase;">${txtRangoFechas}</span>
+            <div style="margin-top: 50px; background-color: rgba(255, 255, 255, 0.1); padding: 15px 50px; border-radius: 50px; border: 2px solid rgba(255,255,255,0.3); z-index: 2;">
+                <span style="font-size: 24px; font-weight: bold; color: #FF9800; text-transform: uppercase; letter-spacing: 2px; display: block;">${txtCicloPortada}</span>
+                <span style="font-size: 15px; font-weight: bold; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; display: block;">${strFechas}</span>
             </div>
             
-            <p style="margin-top: 60px; font-size: 12px; color: rgba(255,255,255,0.7); font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">ÁREA DE DESARROLLO METODOLÓGICO • ${new Date().getFullYear()}</p>
+            <p style="position: absolute; bottom: 30px; font-size: 13px; color: #aaaaaa; z-index: 2; font-weight: bold; letter-spacing: 1px;">ÁREA DE DESARROLLO METODOLÓGICO</p>
         </div>
-        <div class="html2pdf__page-break"></div>
         `;
 
-        // --- PÁGINAS DE CONTENIDO (Semana a semana) ---
-        const mesesShort = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+        // --- PÁGINAS DE CONTENIDO ---
         for (let s = 0; s < numSemanas; s++) {
-            let fechaSemana = new Date(fechaInicioIteracion);
-            fechaSemana.setDate(fechaSemana.getDate() + (s * 7));
+            let fechaSemana = new Date(fechaInicioIteracion); fechaSemana.setDate(fechaSemana.getDate() + (s * 7));
+            let pageBreak = s < numSemanas - 1 ? 'page-break-after: always;' : ''; 
 
-            let dFin = new Date(fechaSemana); dFin.setDate(dFin.getDate() + 6);
-            let subTitulo = `Semana del ${fechaSemana.getDate()} de ${mesesShort[fechaSemana.getMonth()]} al ${dFin.getDate()} de ${mesesShort[dFin.getMonth()]}`;
-
-            // Se cambia height: 210mm a 209mm para asegurar que no se pase a la hoja siguiente en blanco
-            html += `<div style="width: 297mm; height: 209mm; padding: 10mm; box-sizing: border-box; background: white; display: flex; flex-direction: column;">`;
+            html += `<div style="${pageBreak} width: 297mm; height: 205mm; padding: 10mm; box-sizing: border-box; background: white; display: flex; flex-direction: column;">`;
             
-            // Header con ESCUDO EN MEDIO
             html += `
                 <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom: 3px solid #003366; padding-bottom: 12px; margin-bottom: 20px;">
                     <div style="flex: 1;">
                         <h1 style="color: #003366; margin:0; font-size:24px; text-transform:uppercase; font-weight: 900; letter-spacing: 1px;">Planificación Metodológica</h1>
-                        <h2 style="color: #CB3524; margin:5px 0 0 0; font-size:13px; font-weight: bold; text-transform: uppercase;">Metodology ATM - Área de Desarrollo</h2>
+                        <h2 style="color: #CB3524; margin:5px 0 0 0; font-size:14px; font-weight: bold; text-transform: uppercase;">Metodology ATM - Área de Desarrollo</h2>
                     </div>
                     <div style="flex: 1; text-align: center;">
-                        <img src="ESCUDO_ATM.png" style="height: 50px; object-fit: contain;" onerror="this.style.display='none'">
+                        <img src="ESCUDO_ATM.png" style="height: 45px;">
                     </div>
                     <div style="flex: 1; text-align: right;">
-                        <h3 style="margin:0; font-size: 16px; color: #444; font-weight: bold;">${subTitulo}</h3>
-                        <p style="margin:5px 0 0 0; font-size: 12px; color: #888; text-transform: uppercase; font-weight: 600;">Ciclo: ${tipoCiclo}</p>
+                        <h3 style="margin:0; font-size: 16px; color: #444; font-weight: bold;">${formatWeekTitle(fechaSemana)}</h3>
+                        <p style="margin:5px 0 0 0; font-size: 13px; color: #888; text-transform: uppercase; font-weight: 600;">Ciclo: ${tipoCiclo}</p>
                     </div>
                 </div>
             `;
 
-            html += `<div style="display: flex; gap: 8px; width: 100%; flex-grow: 1; align-items: stretch;">`;
+            html += `<div style="display: flex; gap: 10px; width: 100%; flex-grow: 1; align-items: stretch;">`;
             
             for (let d = 0; d < 7; d++) {
-                let fechaDia = new Date(fechaSemana);
-                fechaDia.setDate(fechaDia.getDate() + d);
-                let iso = toLocalISO(fechaDia);
+                let fechaDia = new Date(fechaSemana); fechaDia.setDate(fechaDia.getDate() + d); let iso = toLocalISO(fechaDia);
                 let data = appDB.fechas[iso] || {};
 
-                html += `<div style="flex: 1; border: 1px solid #e1e5eb; border-top: 5px solid #003366; border-radius: 10px; padding: 10px; background: #fdfdff; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.02);">`;
+                html += `<div style="flex: 1; border: 1px solid #e1e5eb; border-top: 5px solid #003366; border-radius: 10px; padding: 12px; background: #fdfdff; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.02);">`;
                 
-                html += `<div style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start;">
+                html += `<div style="border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
-                                <span style="font-weight: 900; color: #003366; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">${fechaDia.toLocaleDateString('es-ES', {weekday: 'long'})}</span><br>
-                                <span style="color: #777; font-size: 11px; font-weight: 600;">${fechaDia.getDate()} ${mesesShort[fechaDia.getMonth()]}</span>
+                                <span style="font-weight: 900; color: #003366; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px;">${fechaDia.toLocaleDateString('es-ES', {weekday: 'long'})}</span><br>
+                                <span style="color: #777; font-size: 12px; font-weight: 600;">${fechaDia.toLocaleDateString('es-ES', {day: '2-digit', month: 'short'})}</span>
                             </div>`;
                 
                 if(fechasPartidos.length > 0 && data.evento !== 'partido') {
@@ -833,19 +800,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(diffDays >= -5 && diffDays <= 2) { 
                         let txtMD = diffDays > 0 ? `MD+${diffDays}` : `MD${diffDays}`; 
                         let bgMD = diffDays === -1 ? '#CB3524' : (diffDays === -2 ? '#FF9800' : '#333');
-                        html += `<span style="background: ${bgMD}; color: white; padding: 3px 6px; border-radius: 5px; font-size: 10px; font-weight: bold; height: fit-content; text-transform: uppercase;">${txtMD}</span>`;
+                        html += `<span style="background: ${bgMD}; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; height: fit-content;">${txtMD}</span>`;
                     }
                 }
                 html += `</div>`;
 
-                if(data.evento === 'partido') html += `<div style="background: #ffebee; color: #c62828; font-size: 12px; padding: 8px; text-align: center; border-radius: 6px; border: 1px solid #ffcdd2; font-weight: 900; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase;">DÍA DE PARTIDO</div>`;
-                else if(data.evento === 'descanso') html += `<div style="background: #e8f5e9; color: #2e7d32; font-size: 12px; padding: 8px; text-align: center; border-radius: 6px; border: 1px dashed #81c784; font-weight: 900; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase;">DESCANSO</div>`;
-                else if(data.evento === 'desplazamiento') html += `<div style="background: #e3f2fd; color: #1565c0; font-size: 12px; padding: 8px; text-align: center; border-radius: 6px; border: 1px solid #90caf9; font-weight: 900; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase;">DESPLAZAMIENTO</div>`;
+                if(data.evento === 'partido') html += `<div style="background: #ffebee; color: #c62828; font-size: 13px; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #ffcdd2; font-weight: 900; margin-bottom: 12px; letter-spacing: 0.5px;">DÍA DE PARTIDO</div>`;
+                else if(data.evento === 'descanso') html += `<div style="background: #e8f5e9; color: #2e7d32; font-size: 13px; padding: 10px; text-align: center; border-radius: 8px; border: 1px dashed #81c784; font-weight: 900; margin-bottom: 12px; letter-spacing: 0.5px;">DESCANSO</div>`;
+                else if(data.evento === 'desplazamiento') html += `<div style="background: #e3f2fd; color: #1565c0; font-size: 13px; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #90caf9; font-weight: 900; margin-bottom: 12px; letter-spacing: 0.5px;">DESPLAZAMIENTO</div>`;
 
                 if(data.contexto && (data.contexto.condicional || data.contexto.emocional)) {
-                    html += `<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #ddd;">`;
-                    if(data.contexto.condicional) html += `<div style="font-size: 10px; color: #e65100; background: #fff3e0; padding: 5px 7px; margin-bottom: 5px; border-radius: 5px; font-weight: 800;">COND: ${data.contexto.condicional}</div>`;
-                    if(data.contexto.emocional) html += `<div style="font-size: 10px; color: #880e4f; background: #fce4ec; padding: 5px 7px; border-radius: 5px; font-weight: 800;">EMOC: ${data.contexto.emocional}</div>`;
+                    html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #ddd;">`;
+                    if(data.contexto.condicional) html += `<div style="font-size: 11px; color: #e65100; background: #fff3e0; padding: 6px 8px; margin-bottom: 6px; border-radius: 6px; font-weight: 800;">COND: ${data.contexto.condicional}</div>`;
+                    if(data.contexto.emocional) html += `<div style="font-size: 11px; color: #880e4f; background: #fce4ec; padding: 6px 8px; border-radius: 6px; font-weight: 800;">EMOC: ${data.contexto.emocional}</div>`;
                     html += `</div>`;
                 }
 
@@ -859,12 +826,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         let cleanBloque = t.bloqueTexto.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ.\s]/g, '').trim();
 
-                        html += `<div style="border-left: 5px solid ${borderColor}; background: ${bgColor}; padding: 8px; margin-bottom: 8px; border-radius: 0 7px 7px 0; border-top: 1px solid rgba(0,0,0,0.03); border-right: 1px solid rgba(0,0,0,0.03); border-bottom: 1px solid rgba(0,0,0,0.03);">
-                                    <strong style="color: ${borderColor}; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;">${cleanBloque}</strong><br>
-                                    <span style="font-weight: 900; color: #222; font-size: 11px; display: block; margin: 3px 0;">${t.gesto}</span>
-                                    <div style="font-size: 9px; color: #555; display: flex; justify-content: space-between; font-weight: bold; align-items: center;">
+                        html += `<div style="border-left: 5px solid ${borderColor}; background: ${bgColor}; padding: 10px; margin-bottom: 10px; border-radius: 0 8px 8px 0; border-top: 1px solid rgba(0,0,0,0.03); border-right: 1px solid rgba(0,0,0,0.03); border-bottom: 1px solid rgba(0,0,0,0.03);">
+                                    <strong style="color: ${borderColor}; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">${cleanBloque}</strong><br>
+                                    <span style="font-weight: 900; color: #222; font-size: 12px; display: block; margin: 4px 0;">${t.gesto}</span>
+                                    <div style="font-size: 10px; color: #555; display: flex; justify-content: space-between; font-weight: bold; align-items: center;">
                                         <span>${t.duracion}m | RPE ${t.rpe}</span>
-                                        ${t.viaSalida ? `<span style="background: #fff; border: 1px solid #ddd; padding: 1px 3px; border-radius: 3px; color:#e65100;">Vía ${t.viaSalida}</span>` : ''}
+                                        ${t.viaSalida ? `<span style="background: #fff; border: 1px solid #ddd; padding: 2px 5px; border-radius: 4px; color:#e65100;">Vía ${t.viaSalida}</span>` : ''}
                                     </div>
                                  </div>`;
                     });
@@ -872,38 +839,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 html += `</div>`; 
             }
-            html += `</div>`; // fin grid días
-            html += `</div>`; // fin página contenido
-
-            // Salto de página oficial para que no deje hojas en blanco
-            if (s < numSemanas - 1) {
-                html += `<div class="html2pdf__page-break"></div>`;
-            }
+            html += `</div>`; 
+            html += `</div>`; 
         }
         
-        html += `</div>`; // fin html principal
+        html += `</div>`;
 
-        // Contenedor temporal limpio
+        // Contenedor temporal: EL EXACTAMENTE MISMO MÉTODO QUE YA TE FUNCIONÓ
         const pdfContainer = document.createElement('div');
         pdfContainer.innerHTML = html;
         pdfContainer.style.position = 'absolute';
-        pdfContainer.style.top = '0';
-        pdfContainer.style.left = '0';
-        pdfContainer.style.zIndex = '-9999'; // Lo ocultamos sin usar display:none
+        pdfContainer.style.top = '-9999px'; // Oculto fuera de pantalla para que no moleste en tu UI
+        pdfContainer.style.left = '-9999px';
         document.body.appendChild(pdfContainer);
-        
-        window.scrollTo(0,0);
 
-        // CONFIGURACIÓN 100% ESTABLE (Igual a la versión original que sí funcionó)
-        // Quitamos la opción pagebreak problemática
+        // CONFIGURACIÓN PREMIUM PARA PDF EXACTA A TU BACKUP
         const opciones = {
             margin:       0, 
-            filename:     `Planificacion_ATM_${txtCicloPortada}.pdf`,
-            image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { scale: 2, useCORS: true, scrollY: 0 }, 
+            filename:     `Planificacion_Premium_ATM.pdf`,
+            image:        { type: 'jpeg', quality: 1 },
+            html2canvas:  { 
+                scale: 2, 
+                useCORS: true, 
+                letterRendering: true
+            }, 
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
         };
 
+        // Generar tal cual el código V1.
         setTimeout(() => {
             html2pdf().set(opciones).from(pdfContainer).save().then(() => {
                 document.body.removeChild(pdfContainer);
@@ -913,7 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (document.body.contains(pdfContainer)) document.body.removeChild(pdfContainer);
                 mostrarAlerta("❌ Error", "Fallo al generar el documento PDF.", true);
             });
-        }, 1500); 
+        }, 1000); 
     });
 
     // 2. Exportar Gráficos
