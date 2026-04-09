@@ -41,6 +41,54 @@ function saveSystemUsers() {
 }
 
 let currentUser = null; let perfilActual = 'general'; let currentDBKey = 'general'; let currentDBListener = null;
+let appDB = {}; 
+
+// Funciones globales para evitar errores de referencia
+window.sanitizeDB = function(db) {
+    if(!db) db = {};
+    if(!db.fechas) db.fechas = {};
+    if(!db.statsBloques) db.statsBloques = { tecnica_defensiva:0, tecnica_ofensiva:0, tactica_defensiva:0, tactica_ofensiva:0 };
+    if(!db.statsGestos) db.statsGestos = {};
+    if(!db.objetivoCiclo) db.objetivoCiclo = "equilibrio";
+    return db;
+};
+
+window.cargarBaseDeDatos = function(dbKey, perfil) { 
+    let rawData = JSON.parse(localStorage.getItem(`atleti_metodologia_team_v1_${dbKey}_${perfil}`));
+    return window.sanitizeDB(rawData); 
+};
+
+window.guardarBaseDeDatos = function() { 
+    appDB = window.sanitizeDB(appDB); 
+    localStorage.setItem(`atleti_metodologia_team_v1_${currentDBKey}_${perfilActual}`, JSON.stringify(appDB)); 
+    database.ref(`planificaciones_team/${currentDBKey}/${perfilActual}`).set(appDB); 
+};
+
+window.conectarBaseDeDatos = function(dbKey, perfil) {
+    currentDBKey = dbKey;
+    perfilActual = perfil;
+    
+    appDB = window.cargarBaseDeDatos(currentDBKey, perfilActual);
+    document.getElementById('select-objetivo').value = appDB.objetivoCiclo;
+    
+    if(window.generarCalendario) window.generarCalendario(document.getElementById('select-ciclo').value);
+    
+    if(currentDBListener) database.ref(currentDBListener).off(); 
+    
+    currentDBListener = `planificaciones_team/${currentDBKey}/${perfilActual}`;
+    
+    database.ref(currentDBListener).on('value', (snapshot) => {
+        const cloudData = snapshot.val();
+        if(cloudData) {
+            appDB = window.sanitizeDB(cloudData);
+            localStorage.setItem(`atleti_metodologia_team_v1_${currentDBKey}_${perfilActual}`, JSON.stringify(appDB));
+            
+            if(document.getElementById('select-objetivo').value !== appDB.objetivoCiclo) document.getElementById('select-objetivo').value = appDB.objetivoCiclo;
+            if(document.getElementById('view-calendario').classList.contains('active') && window.pintarDatosGuardados) window.pintarDatosGuardados();
+            if(document.getElementById('view-dashboard').classList.contains('active')) renderizarGraficos();
+        }
+    });
+};
 
 document.getElementById('btn-login').addEventListener('click', () => {
     let u = document.getElementById('login-user').value.trim().toLowerCase(); let p = document.getElementById('login-pass').value.trim(); let err = document.getElementById('login-error');
@@ -83,7 +131,7 @@ function iniciarAplicacion() {
         if(userCat === "rendimiento") catSelect.value = "rendimiento"; else if(userCat === "desarrollo") catSelect.value = "desarrollo"; else catSelect.value = "formacion";
         catSelect.disabled = true; if(catSelect.dataset.customized) catSelect.dispatchEvent(new Event('change'));
         
-        conectarBaseDeDatos(currentUser.dbKey, perfilActual); 
+        window.conectarBaseDeDatos(currentUser.dbKey, perfilActual); 
         document.getElementById('btn-nav-cal').click(); 
     }
 }
@@ -165,7 +213,7 @@ function renderAdminPanel() {
         if(user.role === 'trainer') {
             entrenadoresTotales++; 
             let dbRaw = JSON.parse(localStorage.getItem(`atleti_metodologia_team_v1_${user.dbKey}_general`));
-            let dbTrainer = sanitizeDB(dbRaw);
+            let dbTrainer = window.sanitizeDB(dbRaw);
             
             Object.entries(dbTrainer.fechas).forEach(([fechaIso, d]) => { 
                 let isMatch = d.evento === 'partido';
@@ -219,7 +267,7 @@ window.auditarEntrenador = function(dbKey, trainerName) {
         catSelect.disabled = true; if(catSelect.dataset.customized) catSelect.dispatchEvent(new Event('change'));
     }
     
-    conectarBaseDeDatos(dbKey, perfilActual);
+    window.conectarBaseDeDatos(dbKey, perfilActual);
     document.getElementById('btn-nav-cal').click(); 
 };
 
@@ -281,53 +329,6 @@ const alternativasInteligentes = {
     "Córners ofensivos": { msg: "Saturación en ABP desde las esquinas. Cambia a faltas o estrategia lateral.", opciones: ["Faltas Laterales al área", "Jugadas de estrategia"] } 
 };
 
-let appDB = {}; 
-
-function sanitizeDB(db) {
-    if(!db) db = {};
-    if(!db.fechas) db.fechas = {};
-    if(!db.statsBloques) db.statsBloques = { tecnica_defensiva:0, tecnica_ofensiva:0, tactica_defensiva:0, tactica_ofensiva:0 };
-    if(!db.statsGestos) db.statsGestos = {};
-    if(!db.objetivoCiclo) db.objetivoCiclo = "equilibrio";
-    return db;
-}
-
-function cargarBaseDeDatos(dbKey, perfil) { 
-    let rawData = JSON.parse(localStorage.getItem(`atleti_metodologia_team_v1_${dbKey}_${perfil}`));
-    return sanitizeDB(rawData); 
-}
-
-function conectarBaseDeDatos(dbKey, perfil) {
-    currentDBKey = dbKey;
-    perfilActual = perfil;
-    
-    appDB = cargarBaseDeDatos(currentDBKey, perfilActual);
-    document.getElementById('select-objetivo').value = appDB.objetivoCiclo;
-    generarCalendario(document.getElementById('select-ciclo').value);
-    
-    if(currentDBListener) database.ref(currentDBListener).off(); 
-    
-    currentDBListener = `planificaciones_team/${currentDBKey}/${perfilActual}`;
-    
-    database.ref(currentDBListener).on('value', (snapshot) => {
-        const cloudData = snapshot.val();
-        if(cloudData) {
-            appDB = sanitizeDB(cloudData);
-            localStorage.setItem(`atleti_metodologia_team_v1_${currentDBKey}_${perfilActual}`, JSON.stringify(appDB));
-            
-            if(document.getElementById('select-objetivo').value !== appDB.objetivoCiclo) document.getElementById('select-objetivo').value = appDB.objetivoCiclo;
-            if(document.getElementById('view-calendario').classList.contains('active')) pintarDatosGuardados();
-            if(document.getElementById('view-dashboard').classList.contains('active')) renderizarGraficos();
-        }
-    });
-}
-
-function guardarBaseDeDatos() { 
-    appDB = sanitizeDB(appDB); 
-    localStorage.setItem(`atleti_metodologia_team_v1_${currentDBKey}_${perfilActual}`, JSON.stringify(appDB)); 
-    database.ref(`planificaciones_team/${currentDBKey}/${perfilActual}`).set(appDB); 
-}
-
 function analizarGesto(gesto, bloque) {
     let cog = 2, ten = 2; let cadenas = [];
     const mapEncadenamientos = { 
@@ -357,7 +358,10 @@ function analizarGesto(gesto, bloque) {
 
 function toLocalISO(dateObj) { const d = new Date(dateObj); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function getMonday(d) { d = new Date(d); let day = d.getDay(), diff = d.getDate() - day + (day === 0 ? -6 : 1); return new Date(d.setDate(diff)); }
-function formatWeekTitle(lunes) { let domingo = new Date(lunes); domingo.setDate(domingo.getDate() + 6); return `Semana del ${lunes.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} al ${domingo.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}`; }
+
+const nombresMesesPdf = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+function formatWeekTitle(lunes) { let domingo = new Date(lunes); domingo.setDate(domingo.getDate() + 6); return `Semana del ${lunes.getDate()} de ${nombresMesesPdf[lunes.getMonth()].substring(0,3).toLowerCase()} al ${domingo.getDate()} de ${nombresMesesPdf[domingo.getMonth()].substring(0,3).toLowerCase()}`; }
 function getPrimerLunesMeso(d) { let firstDay = new Date(d.getFullYear(), d.getMonth(), 1); let day = firstDay.getDay() === 0 ? 7 : firstDay.getDay(); if (day > 4) { firstDay.setDate(firstDay.getDate() + (8 - day)); } else { firstDay.setDate(firstDay.getDate() - (day - 1)); } return firstDay; }
 function getUltimoLunesMeso(d) { let lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0); let day = lastDay.getDay() === 0 ? 7 : lastDay.getDay(); if (day < 4) { lastDay.setDate(lastDay.getDate() - day - 6); } else { lastDay.setDate(lastDay.getDate() - (day - 1)); } return lastDay; }
 
@@ -387,7 +391,7 @@ window.borrarGesto = function(index) { metodologia[setBloqueActual][setConceptoA
 document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('select-perfil').addEventListener('change', (e) => {
-        conectarBaseDeDatos(currentDBKey, e.target.value); 
+        window.conectarBaseDeDatos(currentDBKey, e.target.value); 
         mostrarAlerta("👤 Perfil Cambiado", `Ahora editando planificación de: ${e.target.options[e.target.selectedIndex].text}`, false);
     });
 
@@ -403,7 +407,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.getElementById('select-objetivo').addEventListener('change', (e) => { appDB.objetivoCiclo = e.target.value; guardarBaseDeDatos(); });
+    document.getElementById('select-objetivo').addEventListener('change', (e) => { appDB.objetivoCiclo = e.target.value; window.guardarBaseDeDatos(); });
     const selectCiclo = document.getElementById('select-ciclo'); const calendarioContainer = document.getElementById('calendario-container');
     
     window.generarCalendario = function(tipoCiclo) {
@@ -424,9 +428,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             semanaHTML += `</div></div>`; calendarioContainer.innerHTML += semanaHTML;
         }
-        pintarDatosGuardados();
+        if(window.pintarDatosGuardados) window.pintarDatosGuardados();
     };
-    selectCiclo.addEventListener('change', (e) => generarCalendario(e.target.value));
+    selectCiclo.addEventListener('change', (e) => window.generarCalendario(e.target.value));
 
     const selectBloque = document.getElementById('select-bloque'); const selectConcepto = document.getElementById('select-concepto');
     const selectGesto = document.getElementById('select-gesto'); const selectEncadenamiento = document.getElementById('select-encadenamiento'); const selectNaturaleza = document.getElementById('select-naturaleza'); const contenedorEncadenamiento = document.getElementById('encadenamiento-container');
@@ -467,7 +471,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gesto && bloqueValue) {
             let fechaGuardar = new Date(diaYsemanaActual + "T12:00:00"); fechaGuardar.setDate(fechaGuardar.getDate() + 1); let isoManana = toLocalISO(fechaGuardar); 
             let partidoMañana = (appDB.fechas[isoManana] && appDB.fechas[isoManana].evento === 'partido'); const analisis = analizarGesto(gesto, bloqueValue);
-            // Protocolo MD-1 Adaptado a Jugadores
             if(partidoMañana && analisis.cargaTen === 3) { mostrarAlerta("🚨 ALERTA MÉDICA: PROTOCOLO MD-1", `Mañana hay partido. Prohibido introducir tareas de altísima intensidad neuromuscular o metabólica (${gesto}) hoy.`, true, true); return; }
             let repeticiones = parseInt(appDB.statsGestos[gesto]) || 0; let limite = document.getElementById('select-categoria').value === 'rendimiento' ? 4 : 8;
             if (repeticiones >= limite) { if (alternativasInteligentes[gesto]) { mostrarSmartCard(gesto, alternativasInteligentes[gesto]); } else { mostrarAlerta("⚠️ Límite", `Has repetido ${gesto} ${repeticiones} veces.`, true); } return; }
@@ -478,24 +481,25 @@ document.addEventListener('DOMContentLoaded', () => {
         } else { mostrarAlerta("✅ Guardado", `Contexto actualizado.`, false); }
         const cond = document.getElementById('input-condicional').value; const emo = document.getElementById('input-emocional').value; const trans = document.getElementById('input-transversal').value;
         appDB.fechas[diaYsemanaActual].contexto.condicional = cond || ""; appDB.fechas[diaYsemanaActual].contexto.emocional = emo || ""; appDB.fechas[diaYsemanaActual].contexto.transversal = trans || "";
-        guardarBaseDeDatos(); pintarDatosGuardados(); cerrarModal(); 
+        window.guardarBaseDeDatos(); window.pintarDatosGuardados(); cerrarModal(); 
     });
 
-    document.getElementById('btn-limpiar-dia').addEventListener('click', (e) => { e.preventDefault(); if(appDB.fechas[diaYsemanaActual]) { let tareasDelDia = appDB.fechas[diaYsemanaActual].tareas || []; tareasDelDia.forEach(t => { if(t.bloqueID && appDB.statsBloques[t.bloqueID]) appDB.statsBloques[t.bloqueID] = Math.max(0, appDB.statsBloques[t.bloqueID] - 1); if(t.gesto && appDB.statsGestos[t.gesto]) appDB.statsGestos[t.gesto] = Math.max(0, appDB.statsGestos[t.gesto] - 1); }); delete appDB.fechas[diaYsemanaActual]; guardarBaseDeDatos(); pintarDatosGuardados(); mostrarAlerta("🗑️ Día Limpiado", "Planificación eliminada.", false); } cerrarModal(); });
-    window.limpiarSemana = function(isoLunes) { if(confirm("¿Seguro que quieres borrar TODA la planificación de esta semana?")) { let fechaLunes = new Date(isoLunes + "T12:00:00"); for(let i=0; i<7; i++) { let fd = new Date(fechaLunes); fd.setDate(fd.getDate() + i); let iso = toLocalISO(fd); if(appDB.fechas[iso]) { let tareas = appDB.fechas[iso].tareas || []; tareas.forEach(t => { if(t.bloqueID && appDB.statsBloques[t.bloqueID]) appDB.statsBloques[t.bloqueID] = Math.max(0, appDB.statsBloques[t.bloqueID] - 1); if(t.gesto && appDB.statsGestos[t.gesto]) appDB.statsGestos[t.gesto] = Math.max(0, appDB.statsGestos[t.gesto] - 1); }); delete appDB.fechas[iso]; } } guardarBaseDeDatos(); pintarDatosGuardados(); mostrarAlerta("🗑️ Semana Limpiada", "Toda la semana eliminada.", false); } };
+    document.getElementById('btn-limpiar-dia').addEventListener('click', (e) => { e.preventDefault(); if(appDB.fechas[diaYsemanaActual]) { let tareasDelDia = appDB.fechas[diaYsemanaActual].tareas || []; tareasDelDia.forEach(t => { if(t.bloqueID && appDB.statsBloques[t.bloqueID]) appDB.statsBloques[t.bloqueID] = Math.max(0, appDB.statsBloques[t.bloqueID] - 1); if(t.gesto && appDB.statsGestos[t.gesto]) appDB.statsGestos[t.gesto] = Math.max(0, appDB.statsGestos[t.gesto] - 1); }); delete appDB.fechas[diaYsemanaActual]; window.guardarBaseDeDatos(); window.pintarDatosGuardados(); mostrarAlerta("🗑️ Día Limpiado", "Planificación eliminada.", false); } cerrarModal(); });
+    window.limpiarSemana = function(isoLunes) { if(confirm("¿Seguro que quieres borrar TODA la planificación de esta semana?")) { let fechaLunes = new Date(isoLunes + "T12:00:00"); for(let i=0; i<7; i++) { let fd = new Date(fechaLunes); fd.setDate(fd.getDate() + i); let iso = toLocalISO(fd); if(appDB.fechas[iso]) { let tareas = appDB.fechas[iso].tareas || []; tareas.forEach(t => { if(t.bloqueID && appDB.statsBloques[t.bloqueID]) appDB.statsBloques[t.bloqueID] = Math.max(0, appDB.statsBloques[t.bloqueID] - 1); if(t.gesto && appDB.statsGestos[t.gesto]) appDB.statsGestos[t.gesto] = Math.max(0, appDB.statsGestos[t.gesto] - 1); }); delete appDB.fechas[iso]; } } window.guardarBaseDeDatos(); window.pintarDatosGuardados(); mostrarAlerta("🗑️ Semana Limpiada", "Toda la semana eliminada.", false); } };
 
     function mostrarSmartCard(gestoOriginal, alternativaObj) { let botonesHTML = ''; alternativaObj.opciones.forEach(opc => { botonesHTML += `<button class="btn-alt" onclick="aplicarAlternativaAutomatica('${opc}')"><span> Sustituir por: </span> <b>${opc}</b></button>`; }); document.getElementById('smart-card-container').innerHTML = `<div class="smart-card"><div class="smart-card-header">⚠️ Alerta Metodológica</div><p>Límite superado para <b>${gestoOriginal}</b>.<br>${alternativaObj.msg}</p><div class="smart-btn-group">${botonesHTML}</div></div>`; document.getElementById('smart-card-container').classList.remove('hidden'); }
     window.aplicarAlternativaAutomatica = function(nuevoGesto) { 
+        let selectGesto = document.getElementById('select-gesto');
         selectGesto.innerHTML += `<option value="${nuevoGesto}" selected>${nuevoGesto}</option>`; 
         selectGesto.value = nuevoGesto; 
         if(selectGesto.dataset.customized) { selectGesto.dispatchEvent(new Event('change')); }
         document.getElementById('smart-card-container').classList.add('hidden'); 
         document.getElementById('btn-guardar-tarea').click(); 
     };
-    window.toggleTaskStatus = function(fechaISO, taskIndex, nuevoStatus) { appDB.fechas[fechaISO].tareas[taskIndex].status = nuevoStatus; if(nuevoStatus === 'done' && !appDB.fechas[fechaISO].tareas[taskIndex].calidad) { appDB.fechas[fechaISO].tareas[taskIndex].calidad = 2; } guardarBaseDeDatos(); pintarDatosGuardados(); renderizarGraficos(); };
-    window.setTaskQuality = function(fechaISO, taskIndex, calidad) { appDB.fechas[fechaISO].tareas[taskIndex].calidad = calidad; guardarBaseDeDatos(); pintarDatosGuardados(); };
+    window.toggleTaskStatus = function(fechaISO, taskIndex, nuevoStatus) { appDB.fechas[fechaISO].tareas[taskIndex].status = nuevoStatus; if(nuevoStatus === 'done' && !appDB.fechas[fechaISO].tareas[taskIndex].calidad) { appDB.fechas[fechaISO].tareas[taskIndex].calidad = 2; } window.guardarBaseDeDatos(); window.pintarDatosGuardados(); renderizarGraficos(); };
+    window.setTaskQuality = function(fechaISO, taskIndex, calidad) { appDB.fechas[fechaISO].tareas[taskIndex].calidad = calidad; window.guardarBaseDeDatos(); window.pintarDatosGuardados(); };
 
-    function pintarDatosGuardados() {
+    window.pintarDatosGuardados = function() {
         document.querySelectorAll('.day-context-box').forEach(el => el.innerHTML = ''); document.querySelectorAll('.task-list').forEach(el => el.innerHTML = ''); document.querySelectorAll('.md-badge').forEach(el => el.remove());
         let fechasPartidos = []; for (const [f, d] of Object.entries(appDB.fechas)) { if(d.evento === 'partido') fechasPartidos.push(new Date(f + "T12:00:00").getTime()); }
 
@@ -535,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         if(currentUser && currentUser.role === 'trainer') inicializarDragAndDrop();
-    }
+    };
 
     const modal = document.getElementById('add-modal');
     window.abrirModal = (idUnico, tituloFormateado) => { 
@@ -585,7 +589,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('input-condicional').value = ""; document.getElementById('input-emocional').value = ""; document.getElementById('input-transversal').value = ""; 
     };
     
-    document.getElementById('btn-close-modal').addEventListener('click', cerrarModal);
+    document.getElementById('btn-close-modal').addEventListener('click', window.cerrarModal);
     function mostrarAlerta(titulo, mensaje, esError, esWarningCognitivo = false) { const container = document.getElementById('alert-container'); let extraClass = esWarningCognitivo ? "warning-cog" : ""; let colorBorder = esError ? '#CB3524' : (esWarningCognitivo ? '#FF9800' : '#4CAF50'); if(esError && titulo.includes("MÉDICA")) extraClass = "critical-med"; container.innerHTML = `<div class="alert-box ${extraClass}" style="border-left-color: ${colorBorder}"><strong>${titulo}</strong><br>${mensaje}</div>`; setTimeout(() => container.innerHTML = '', 4500); }
 
     const autogenModal = document.getElementById('autogen-modal'); document.getElementById('btn-open-autogen').addEventListener('click', () => autogenModal.classList.remove('hidden')); document.getElementById('btn-close-autogen').addEventListener('click', () => autogenModal.classList.add('hidden')); function getLeastUsedTask(poolArray) { let minReps = Infinity; let bestTask = poolArray[0]; poolArray.forEach(task => { let reps = appDB.statsGestos[task.g] || 0; if(reps < minReps) { minReps = reps; bestTask = task; } }); return bestTask; }
@@ -606,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
             abp: { tecnica: [{b:"tecnica_defensiva", t:"🛡️ Técnica Defensiva", g:"Marcaje al hombre", c:2}, {b:"tecnica_ofensiva", t:"⚔️ Técnica Ofensiva", g:"Remate de cabeza", c:3}], tactica: [{b:"tactica_defensiva", t:"🛑 Táctica Defensiva", g:"Defensa de Córner (Zonal/Mixta)", c:3}, {b:"tactica_ofensiva", t:"🔥 Táctica Ofensiva", g:"Jugadas de estrategia", c:3}] } 
         };
         for(let i=0; i<7; i++) { let fd = new Date(lunes); fd.setDate(fd.getDate() + i); let iso = toLocalISO(fd); let jsDay = fd.getDay() === 0 ? 7 : fd.getDay(); let MD = jsDay - diaPartido; appDB.fechas[iso] = { evento: "", contexto: { condicional:"", emocional:"", transversal:"" }, tareas: [] }; if(jsDay === diaPartido) { appDB.fechas[iso].evento = "partido"; appDB.fechas[iso].contexto.emocional = "Foco competitivo"; } else if (trainingDays.includes(jsDay)) { let tTec = getLeastUsedTask(pools[perfilRival].tecnica); let tTac = getLeastUsedTask(pools[perfilRival].tactica); if (MD === -1) { appDB.fechas[iso].contexto.condicional = "Activación Pre-Partido"; appDB.fechas[iso].tareas.push({bloqueID:"tactica_ofensiva", bloqueTexto:"🔥 Táctica Ofensiva", gesto:"Jugadas de estrategia", encadenado:"", cognitiva:1, status:'planned', naturaleza: 'analitica', calidad:0, duracion: 10, rpe: 3, carga: 30}); appDB.statsBloques["tactica_ofensiva"] = (appDB.statsBloques["tactica_ofensiva"]||0)+1; appDB.statsGestos["Jugadas de estrategia"] = (appDB.statsGestos["Jugadas de estrategia"]||0)+1; } else if (Math.abs(MD) === 2 || MD === -2) { appDB.fechas[iso].contexto.condicional = "Velocidad de Reacción y Reducidos"; appDB.fechas[iso].tareas.push({bloqueID:"tecnica_ofensiva", bloqueTexto:"⚔️ Técnica Ofensiva", gesto:"Regate en 1vs1 (Desborde)", encadenado:"", cognitiva:3, status:'planned', naturaleza: 'juego_real', calidad:0, duracion: 15, rpe: 8, carga: 120}); appDB.statsBloques["tecnica_ofensiva"] = (appDB.statsBloques["tecnica_ofensiva"]||0)+1; appDB.statsGestos["Regate en 1vs1 (Desborde)"] = (appDB.statsGestos["Regate en 1vs1 (Desborde)"]||0)+1; } else { appDB.fechas[iso].contexto.condicional = "Fuerza Específica / Resistencia"; appDB.fechas[iso].tareas.push({bloqueID:tTec.b, bloqueTexto:tTec.t, gesto:tTec.g, encadenado:"", cognitiva:tTec.c, status:'planned', naturaleza: 'semi_analitica', calidad:0, duracion: 20, rpe: 6, carga: 120}); appDB.fechas[iso].tareas.push({bloqueID:tTac.b, bloqueTexto:tTac.t, gesto:tTac.g, encadenado:"", cognitiva:tTac.c, status:'planned', naturaleza: 'global', calidad:0, duracion: 25, rpe: 7, carga: 175, viaSalida: tTac.v || null}); appDB.statsBloques[tTec.b] = (appDB.statsBloques[tTec.b]||0)+1; appDB.statsGestos[tTec.g] = (appDB.statsGestos[tTec.g]||0)+1; appDB.statsBloques[tTac.b] = (appDB.statsBloques[tTac.b]||0)+1; appDB.statsGestos[tTac.g] = (appDB.statsGestos[tTac.g]||0)+1; } } else { appDB.fechas[iso].evento = "descanso"; } }
-        guardarBaseDeDatos(); pintarDatosGuardados(); autogenModal.classList.add('hidden'); mostrarAlerta("🪄 IA Mágica", "Semana generada asegurando máxima variabilidad de equipo.", false);
+        window.guardarBaseDeDatos(); window.pintarDatosGuardados(); autogenModal.classList.add('hidden'); mostrarAlerta("🪄 IA Mágica", "Semana generada asegurando máxima variabilidad de equipo.", false);
     });
 
     const importModal = document.getElementById('import-text-modal'); document.getElementById('btn-open-import').addEventListener('click', () => importModal.classList.remove('hidden')); document.getElementById('btn-close-import').addEventListener('click', () => importModal.classList.add('hidden'));
@@ -632,7 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        guardarBaseDeDatos(); pintarDatosGuardados(); importModal.classList.add('hidden'); document.getElementById('ia-raw-text').value = ""; mostrarAlerta("🤖 Traductor Completado", `Se han volcado ${tareasAñadidas} tareas al mes actual.`, false);
+        window.guardarBaseDeDatos(); window.pintarDatosGuardados(); importModal.classList.add('hidden'); document.getElementById('ia-raw-text').value = ""; mostrarAlerta("🤖 Traductor Completado", `Se han volcado ${tareasAñadidas} tareas al mes actual.`, false);
     });
 
     // COMPARATIVA HISTÓRICA
@@ -705,79 +709,121 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 7. EXPORTACIÓN A PDF (CALENDARIO)
+    // 7. EXPORTACIÓN A PDF (LA VERSIÓN ESTABLE CON PORTADA AZUL + SIN HOJAS EN BLANCO)
     // ==========================================
-    
     document.getElementById('btn-export-calendario').addEventListener('click', () => { 
-        mostrarAlerta("⏳ Generando Informe", "Construyendo documento PDF premium...", false);
+        mostrarAlerta("⏳ Generando Informe", "Preparando PDF...", false);
         
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
         const tipoCiclo = document.getElementById('select-ciclo').value;
         let fechaInicioIteracion, numSemanas = 0;
         let txtCicloPortada = "";
+        let fechaFinIteracion;
 
-        if (tipoCiclo === 'micro') { fechaInicioIteracion = getMonday(hoy); numSemanas = 1; txtCicloPortada = "MICROCICLO SEMANAL"; } 
-        else if (tipoCiclo === 'meso') { let primerLunes = getPrimerLunesMeso(hoy); let ultimoLunes = getUltimoLunesMeso(hoy); fechaInicioIteracion = new Date(primerLunes); numSemanas = Math.round((ultimoLunes - primerLunes) / (7 * 24 * 60 * 60 * 1000)) + 1; txtCicloPortada = "MESOCICLO MENSUAL"; } 
-        else if (tipoCiclo === 'macro') { let startYear = hoy.getMonth() >= 6 ? hoy.getFullYear() : hoy.getFullYear() - 1; let dAgosto = new Date(startYear, 7, 1); fechaInicioIteracion = getPrimerLunesMeso(dAgosto); let dJunio = new Date(startYear + 1, 5, 30); let ultimoLunes = getUltimoLunesMeso(dJunio); numSemanas = Math.round((ultimoLunes - fechaInicioIteracion) / (7 * 24 * 60 * 60 * 1000)) + 1; txtCicloPortada = "MACROCICLO ANUAL"; }
+        if (tipoCiclo === 'micro') { 
+            fechaInicioIteracion = getMonday(hoy); 
+            numSemanas = 1; 
+            txtCicloPortada = "MICROCICLO SEMANAL"; 
+            fechaFinIteracion = new Date(fechaInicioIteracion);
+            fechaFinIteracion.setDate(fechaFinIteracion.getDate() + 6);
+        } 
+        else if (tipoCiclo === 'meso') { 
+            let primerDiaMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+            fechaInicioIteracion = getPrimerLunesMeso(primerDiaMes); 
+            let ultimoDiaMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+            let diffTime = Math.abs(ultimoDiaMes - fechaInicioIteracion);
+            numSemanas = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
+            txtCicloPortada = "MESOCICLO MENSUAL"; 
+            fechaFinIteracion = new Date(fechaInicioIteracion);
+            fechaFinIteracion.setDate(fechaFinIteracion.getDate() + (numSemanas * 7) - 1);
+        } 
+        else if (tipoCiclo === 'macro') { 
+            let startYear = hoy.getMonth() >= 7 ? hoy.getFullYear() : hoy.getFullYear() - 1; 
+            let dAgosto = new Date(startYear, 7, 1); 
+            fechaInicioIteracion = getPrimerLunesMeso(dAgosto); 
+            let dJunioNext = new Date(startYear + 1, 6, 0); 
+            let diffTime = Math.abs(dJunioNext - fechaInicioIteracion);
+            numSemanas = Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7));
+            txtCicloPortada = "MACROCICLO ANUAL"; 
+            fechaFinIteracion = new Date(fechaInicioIteracion);
+            fechaFinIteracion.setDate(fechaFinIteracion.getDate() + (numSemanas * 7) - 1);
+        }
+
+        const strInicio = `${fechaInicioIteracion.getDate()} DE ${nombresMesesPdf[fechaInicioIteracion.getMonth()].toUpperCase()}`;
+        const strFin = `${fechaFinIteracion.getDate()} DE ${nombresMesesPdf[fechaFinIteracion.getMonth()].toUpperCase()}`;
+        const txtRangoFechas = `DEL ${strInicio} AL ${strFin}`;
 
         let fechasPartidos = []; 
         for (const [f, d] of Object.entries(appDB.fechas)) { if(d.evento === 'partido') fechasPartidos.push(new Date(f + "T12:00:00").getTime()); }
 
-        let html = `<div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333; background: #fff; width: 297mm; min-height: 210mm;">`;
+        let html = `<div style="font-family: Arial, Helvetica, sans-serif; color: #333; width: 100%;">`;
         
-        // Lógica de fechas
-        const mesesTexto = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
-        let dFinCiclo = new Date(fechaInicioIteracion);
-        dFinCiclo.setDate(dFinCiclo.getDate() + (numSemanas * 7) - 1);
-        let strFechas = `DEL ${fechaInicioIteracion.getDate()} DE ${mesesTexto[fechaInicioIteracion.getMonth()]} AL ${dFinCiclo.getDate()} DE ${mesesTexto[dFinCiclo.getMonth()]}`;
-
-        // --- PORTADA MODIFICADA (FONDO AZUL CORPORATIVO Y ESCUDO CENTRADO) ---
+        // --- PORTADA PREMIUM (Fondo Azul Sólido) ---
+        // Se cambió height: 210mm por 209mm para evitar overflow y hojas en blanco
         html += `
-        <div style="width: 297mm; height: 210mm; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #003366; page-break-after: always; box-sizing: border-box; text-align: center; border-bottom: 25px solid #CB3524; color: white;">
-            <img src="ESCUDO_ATM.png" style="height: 220px; margin-bottom: 40px; object-fit: contain;">
-            <h1 style="font-size: 55px; font-weight: 900; margin: 0; color: white; text-transform: uppercase; letter-spacing: 1px;">PLANIFICACIÓN METODOLÓGICA</h1>
-            <div style="height: 5px; width: 120px; background-color: white; margin: 25px auto;"></div>
-            <h2 style="font-size: 28px; font-weight: 300; margin: 0; color: #f0f0f0; letter-spacing: 5px; text-transform: uppercase;">Metodology ATM</h2>
-            <div style="margin-top: 50px; background-color: rgba(255,255,255,0.1); padding: 15px 40px; border-radius: 40px; border: 1px solid rgba(255,255,255,0.2);">
-                <span style="font-size: 24px; font-weight: bold; color: #FF9800; text-transform: uppercase;">${txtCicloPortada}</span>
-                <span style="font-size: 15px; font-weight: bold; color: white; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; display: block;">${strFechas}</span>
+        <div style="width: 297mm; height: 209mm; background-color: #003366; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; box-sizing: border-box; text-align: center; border-bottom: 20px solid #CB3524;">
+            
+            <img src="ESCUDO_ATM.png" style="height: 250px; margin-bottom: 40px;" onerror="this.style.display='none'">
+            
+            <h1 style="font-family: 'Arial Black', Impact, sans-serif; font-size: 50px; font-weight: 900; margin: 0; letter-spacing: 2px; color: #ffffff; text-transform: uppercase;">PLANIFICACIÓN METODOLÓGICA</h1>
+            
+            <div style="height: 6px; width: 150px; background-color: #FF9800; margin: 30px auto;"></div>
+            
+            <h2 style="font-family: Arial, Helvetica, sans-serif; font-size: 26px; font-weight: 600; margin: 0; color: #e0e0e0; letter-spacing: 6px; text-transform: uppercase;">METODOLOGY ATM</h2>
+            
+            <div style="margin-top: 50px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 40px; padding: 20px 60px; background-color: rgba(0, 0, 0, 0.2);">
+                <span style="font-family: 'Arial Black', Impact, sans-serif; font-size: 24px; font-weight: 900; color: #FF9800; letter-spacing: 2px; display: block; text-transform: uppercase;">${txtCicloPortada}</span>
+                <span style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; color: #ffffff; letter-spacing: 1px; margin-top: 8px; display: block; text-transform: uppercase;">${txtRangoFechas}</span>
             </div>
-            <p style="position: absolute; bottom: 35px; color: rgba(255,255,255,0.7); font-size: 14px; font-weight: bold;">ÁREA DE DESARROLLO</p>
+            
+            <p style="margin-top: 60px; font-size: 12px; color: rgba(255,255,255,0.7); font-weight: bold; letter-spacing: 2px; text-transform: uppercase;">ÁREA DE DESARROLLO METODOLÓGICO • ${new Date().getFullYear()}</p>
         </div>
+        <div class="html2pdf__page-break"></div>
         `;
 
-        // --- PÁGINAS DE CONTENIDO ---
+        // --- PÁGINAS DE CONTENIDO (Semana a semana) ---
+        const mesesShort = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
         for (let s = 0; s < numSemanas; s++) {
-            let fechaSemana = new Date(fechaInicioIteracion); fechaSemana.setDate(fechaSemana.getDate() + (s * 7));
-            let pageBreak = s < numSemanas - 1 ? 'page-break-after: always;' : ''; 
+            let fechaSemana = new Date(fechaInicioIteracion);
+            fechaSemana.setDate(fechaSemana.getDate() + (s * 7));
 
-            html += `<div style="${pageBreak} width: 297mm; height: 210mm; padding: 15mm; box-sizing: border-box; background: white; display: flex; flex-direction: column;">`;
+            let dFin = new Date(fechaSemana); dFin.setDate(dFin.getDate() + 6);
+            let subTitulo = `Semana del ${fechaSemana.getDate()} de ${mesesShort[fechaSemana.getMonth()]} al ${dFin.getDate()} de ${mesesShort[dFin.getMonth()]}`;
+
+            // Se cambia height: 210mm a 209mm para asegurar que no se pase a la hoja siguiente en blanco
+            html += `<div style="width: 297mm; height: 209mm; padding: 10mm; box-sizing: border-box; background: white; display: flex; flex-direction: column;">`;
             
+            // Header con ESCUDO EN MEDIO
             html += `
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 3px solid #003366; padding-bottom: 12px; margin-bottom: 20px;">
-                    <div>
-                        <h1 style="color: #003366; margin:0; font-size:26px; text-transform:uppercase; font-weight: 900; letter-spacing: 1px;">Planificación Metodológica</h1>
-                        <h2 style="color: #CB3524; margin:5px 0 0 0; font-size:15px; font-weight: bold; text-transform: uppercase;">Metodology ATM - Área de Desarrollo</h2>
+                <div style="display:flex; justify-content:space-between; align-items:flex-end; border-bottom: 3px solid #003366; padding-bottom: 12px; margin-bottom: 20px;">
+                    <div style="flex: 1;">
+                        <h1 style="color: #003366; margin:0; font-size:24px; text-transform:uppercase; font-weight: 900; letter-spacing: 1px;">Planificación Metodológica</h1>
+                        <h2 style="color: #CB3524; margin:5px 0 0 0; font-size:13px; font-weight: bold; text-transform: uppercase;">Metodology ATM - Área de Desarrollo</h2>
                     </div>
-                    <div style="text-align: right;">
-                        <h3 style="margin:0; font-size: 18px; color: #444; font-weight: bold;">${formatWeekTitle(fechaSemana)}</h3>
-                        <p style="margin:5px 0 0 0; font-size: 13px; color: #888; text-transform: uppercase; font-weight: 600;">Ciclo: ${tipoCiclo}</p>
+                    <div style="flex: 1; text-align: center;">
+                        <img src="ESCUDO_ATM.png" style="height: 50px; object-fit: contain;" onerror="this.style.display='none'">
+                    </div>
+                    <div style="flex: 1; text-align: right;">
+                        <h3 style="margin:0; font-size: 16px; color: #444; font-weight: bold;">${subTitulo}</h3>
+                        <p style="margin:5px 0 0 0; font-size: 12px; color: #888; text-transform: uppercase; font-weight: 600;">Ciclo: ${tipoCiclo}</p>
                     </div>
                 </div>
             `;
 
-            html += `<div style="display: flex; gap: 10px; width: 100%; flex-grow: 1; align-items: stretch;">`;
+            html += `<div style="display: flex; gap: 8px; width: 100%; flex-grow: 1; align-items: stretch;">`;
             
             for (let d = 0; d < 7; d++) {
-                let fechaDia = new Date(fechaSemana); fechaDia.setDate(fechaDia.getDate() + d); let iso = toLocalISO(fechaDia);
+                let fechaDia = new Date(fechaSemana);
+                fechaDia.setDate(fechaDia.getDate() + d);
+                let iso = toLocalISO(fechaDia);
                 let data = appDB.fechas[iso] || {};
 
-                html += `<div style="flex: 1; border: 1px solid #e1e5eb; border-top: 5px solid #003366; border-radius: 10px; padding: 12px; background: #fdfdff; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.02);">`;
+                html += `<div style="flex: 1; border: 1px solid #e1e5eb; border-top: 5px solid #003366; border-radius: 10px; padding: 10px; background: #fdfdff; display: flex; flex-direction: column; box-shadow: 0 4px 10px rgba(0,0,0,0.02);">`;
                 
-                html += `<div style="border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+                html += `<div style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start;">
                             <div>
-                                <span style="font-weight: 900; color: #003366; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px;">${fechaDia.toLocaleDateString('es-ES', {weekday: 'long'})}</span><br>
-                                <span style="color: #777; font-size: 12px; font-weight: 600;">${fechaDia.toLocaleDateString('es-ES', {day: '2-digit', month: 'short'})}</span>
+                                <span style="font-weight: 900; color: #003366; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">${fechaDia.toLocaleDateString('es-ES', {weekday: 'long'})}</span><br>
+                                <span style="color: #777; font-size: 11px; font-weight: 600;">${fechaDia.getDate()} ${mesesShort[fechaDia.getMonth()]}</span>
                             </div>`;
                 
                 if(fechasPartidos.length > 0 && data.evento !== 'partido') {
@@ -787,19 +833,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(diffDays >= -5 && diffDays <= 2) { 
                         let txtMD = diffDays > 0 ? `MD+${diffDays}` : `MD${diffDays}`; 
                         let bgMD = diffDays === -1 ? '#CB3524' : (diffDays === -2 ? '#FF9800' : '#333');
-                        html += `<span style="background: ${bgMD}; color: white; padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; height: fit-content;">${txtMD}</span>`;
+                        html += `<span style="background: ${bgMD}; color: white; padding: 3px 6px; border-radius: 5px; font-size: 10px; font-weight: bold; height: fit-content; text-transform: uppercase;">${txtMD}</span>`;
                     }
                 }
                 html += `</div>`;
 
-                if(data.evento === 'partido') html += `<div style="background: #ffebee; color: #c62828; font-size: 13px; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #ffcdd2; font-weight: 900; margin-bottom: 12px; letter-spacing: 0.5px;">DÍA DE PARTIDO</div>`;
-                else if(data.evento === 'descanso') html += `<div style="background: #e8f5e9; color: #2e7d32; font-size: 13px; padding: 10px; text-align: center; border-radius: 8px; border: 1px dashed #81c784; font-weight: 900; margin-bottom: 12px; letter-spacing: 0.5px;">DESCANSO</div>`;
-                else if(data.evento === 'desplazamiento') html += `<div style="background: #e3f2fd; color: #1565c0; font-size: 13px; padding: 10px; text-align: center; border-radius: 8px; border: 1px solid #90caf9; font-weight: 900; margin-bottom: 12px; letter-spacing: 0.5px;">DESPLAZAMIENTO</div>`;
+                if(data.evento === 'partido') html += `<div style="background: #ffebee; color: #c62828; font-size: 12px; padding: 8px; text-align: center; border-radius: 6px; border: 1px solid #ffcdd2; font-weight: 900; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase;">DÍA DE PARTIDO</div>`;
+                else if(data.evento === 'descanso') html += `<div style="background: #e8f5e9; color: #2e7d32; font-size: 12px; padding: 8px; text-align: center; border-radius: 6px; border: 1px dashed #81c784; font-weight: 900; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase;">DESCANSO</div>`;
+                else if(data.evento === 'desplazamiento') html += `<div style="background: #e3f2fd; color: #1565c0; font-size: 12px; padding: 8px; text-align: center; border-radius: 6px; border: 1px solid #90caf9; font-weight: 900; margin-bottom: 10px; letter-spacing: 0.5px; text-transform: uppercase;">DESPLAZAMIENTO</div>`;
 
                 if(data.contexto && (data.contexto.condicional || data.contexto.emocional)) {
-                    html += `<div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #ddd;">`;
-                    if(data.contexto.condicional) html += `<div style="font-size: 11px; color: #e65100; background: #fff3e0; padding: 6px 8px; margin-bottom: 6px; border-radius: 6px; font-weight: 800;">COND: ${data.contexto.condicional}</div>`;
-                    if(data.contexto.emocional) html += `<div style="font-size: 11px; color: #880e4f; background: #fce4ec; padding: 6px 8px; border-radius: 6px; font-weight: 800;">EMOC: ${data.contexto.emocional}</div>`;
+                    html += `<div style="margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed #ddd;">`;
+                    if(data.contexto.condicional) html += `<div style="font-size: 10px; color: #e65100; background: #fff3e0; padding: 5px 7px; margin-bottom: 5px; border-radius: 5px; font-weight: 800;">COND: ${data.contexto.condicional}</div>`;
+                    if(data.contexto.emocional) html += `<div style="font-size: 10px; color: #880e4f; background: #fce4ec; padding: 5px 7px; border-radius: 5px; font-weight: 800;">EMOC: ${data.contexto.emocional}</div>`;
                     html += `</div>`;
                 }
 
@@ -813,12 +859,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         let cleanBloque = t.bloqueTexto.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ.\s]/g, '').trim();
 
-                        html += `<div style="border-left: 5px solid ${borderColor}; background: ${bgColor}; padding: 10px; margin-bottom: 10px; border-radius: 0 8px 8px 0; border-top: 1px solid rgba(0,0,0,0.03); border-right: 1px solid rgba(0,0,0,0.03); border-bottom: 1px solid rgba(0,0,0,0.03);">
-                                    <strong style="color: ${borderColor}; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">${cleanBloque}</strong><br>
-                                    <span style="font-weight: 900; color: #222; font-size: 12px; display: block; margin: 4px 0;">${t.gesto}</span>
-                                    <div style="font-size: 10px; color: #555; display: flex; justify-content: space-between; font-weight: bold; align-items: center;">
+                        html += `<div style="border-left: 5px solid ${borderColor}; background: ${bgColor}; padding: 8px; margin-bottom: 8px; border-radius: 0 7px 7px 0; border-top: 1px solid rgba(0,0,0,0.03); border-right: 1px solid rgba(0,0,0,0.03); border-bottom: 1px solid rgba(0,0,0,0.03);">
+                                    <strong style="color: ${borderColor}; font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;">${cleanBloque}</strong><br>
+                                    <span style="font-weight: 900; color: #222; font-size: 11px; display: block; margin: 3px 0;">${t.gesto}</span>
+                                    <div style="font-size: 9px; color: #555; display: flex; justify-content: space-between; font-weight: bold; align-items: center;">
                                         <span>${t.duracion}m | RPE ${t.rpe}</span>
-                                        ${t.viaSalida ? `<span style="background: #fff; border: 1px solid #ddd; padding: 2px 5px; border-radius: 4px; color:#e65100;">Vía ${t.viaSalida}</span>` : ''}
+                                        ${t.viaSalida ? `<span style="background: #fff; border: 1px solid #ddd; padding: 1px 3px; border-radius: 3px; color:#e65100;">Vía ${t.viaSalida}</span>` : ''}
                                     </div>
                                  </div>`;
                     });
@@ -826,25 +872,48 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 html += `</div>`; 
             }
-            html += `</div>`; 
-            html += `</div>`; 
+            html += `</div>`; // fin grid días
+            html += `</div>`; // fin página contenido
+
+            // Salto de página oficial para que no deje hojas en blanco
+            if (s < numSemanas - 1) {
+                html += `<div class="html2pdf__page-break"></div>`;
+            }
         }
         
-        html += `</div>`;
+        html += `</div>`; // fin html principal
 
+        // Contenedor temporal limpio
+        const pdfContainer = document.createElement('div');
+        pdfContainer.innerHTML = html;
+        pdfContainer.style.position = 'absolute';
+        pdfContainer.style.top = '0';
+        pdfContainer.style.left = '0';
+        pdfContainer.style.zIndex = '-9999'; // Lo ocultamos sin usar display:none
+        document.body.appendChild(pdfContainer);
+        
+        window.scrollTo(0,0);
+
+        // CONFIGURACIÓN 100% ESTABLE (Igual a la versión original que sí funcionó)
+        // Quitamos la opción pagebreak problemática
         const opciones = {
             margin:       0, 
-            filename:     `Planificacion_Premium_ATM.pdf`,
+            filename:     `Planificacion_ATM_${txtCicloPortada}.pdf`,
             image:        { type: 'jpeg', quality: 0.98 },
-            html2canvas:  { 
-                scale: 2, 
-                useCORS: true, 
-                letterRendering: true
-            }, 
+            html2canvas:  { scale: 2, useCORS: true, scrollY: 0 }, 
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
         };
 
-        html2pdf().set(opciones).from(html).save();
+        setTimeout(() => {
+            html2pdf().set(opciones).from(pdfContainer).save().then(() => {
+                document.body.removeChild(pdfContainer);
+                mostrarAlerta("✅ Éxito", "El PDF se ha descargado correctamente.", false);
+            }).catch(err => {
+                console.error(err);
+                if (document.body.contains(pdfContainer)) document.body.removeChild(pdfContainer);
+                mostrarAlerta("❌ Error", "Fallo al generar el documento PDF.", true);
+            });
+        }, 1500); 
     });
 
     // 2. Exportar Gráficos
@@ -1014,7 +1083,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-Mutator.observe(select, { childList: true, attributes: true, attributeFilter: ['disabled'] });
+            const observer = new MutationObserver(() => {
+                renderOptions();
+                triggerText.textContent = select.options[select.selectedIndex]?.text || '';
+                wrapper.classList.toggle('disabled-wrapper', select.disabled);
+            });
+            observer.observe(select, { childList: true, attributes: true, attributeFilter: ['disabled'] });
             
             wrapper.classList.toggle('disabled-wrapper', select.disabled);
         });
@@ -1041,7 +1115,7 @@ function renderMacrociclo() {
         for(let s = 0; s < numSemanas; s++) {
             let fechaSemana = new Date(currentLunes); fechaSemana.setDate(fechaSemana.getDate() + (s * 7)); let isoLunes = toLocalISO(fechaSemana);
             let claseFase = 'phase-comp'; if(monthIndex === 7) claseFase = 'phase-pre'; if(monthIndex === 11 && s > 2) claseFase = 'phase-break'; if(monthIndex === 5 && s > 1) claseFase = 'phase-break'; 
-            let numTareas = 0; for(let i=0; i<7; i++) { d = new Date(fechaSemana); d.setDate(d.getDate()+i); let iso = toLocalISO(d); if(appDB.fechas[iso] && appDB.fechas[iso].tareas) numTareas += appDB.fechas[iso].tareas.length; }
+            let numTareas = 0; for(let i=0; i<7; i++) { let d = new Date(fechaSemana); d.setDate(d.getDate()+i); let iso = toLocalISO(d); if(appDB.fechas[iso] && appDB.fechas[iso].tareas) numTareas += appDB.fechas[iso].tareas.length; }
             let heightBar = numTareas === 0 ? 5 : Math.min(100, (numTareas * 10));
             htmlSemanas += `<div class="gantt-week ${claseFase}" title="Ver Microciclo"><div class="gantt-tooltip">Micro ${fechaSemana.getDate()}/${fechaSemana.getMonth()+1}<br>${numTareas} Tareas</div><div class="gantt-bar" style="height: ${heightBar}px;"></div></div>`;
         }
@@ -1070,14 +1144,3 @@ let plantillasGuardadas = JSON.parse(localStorage.getItem('atleti_templates_team
 window.abrirModalPlantilla = function(isoLunes) { document.getElementById('template-iso-lunes').value = isoLunes; document.getElementById('input-template-name').value = ""; document.getElementById('template-modal').classList.remove('hidden'); };
 window.cargarPlantillaPrompt = function(isoLunesDestino) { let nombres = Object.keys(plantillasGuardadas); if(nombres.length === 0) return alert("Sin plantillas."); let msj = "NÚMERO de plantilla:\n"; nombres.forEach((n, i) => msj += `${i+1}. ${n}\n`); let seleccion = prompt(msj); if(seleccion && !isNaN(seleccion) && seleccion > 0 && seleccion <= nombres.length) { let nombreElegido = nombres[seleccion-1]; let semanaData = plantillasGuardadas[nombreElegido]; let fecha = new Date(isoLunesDestino + "T12:00:00"); for(let i=0; i<7; i++) { let currentISO = toLocalISO(fecha); if(semanaData[i]) { appDB.fechas[currentISO] = JSON.parse(JSON.stringify(semanaData[i])); if(appDB.fechas[currentISO].tareas) { appDB.fechas[currentISO].tareas.forEach(t => { appDB.statsBloques[t.bloqueID] = (appDB.statsBloques[t.bloqueID] || 0) + 1; appDB.statsGestos[t.gesto] = (appDB.statsGestos[t.gesto] || 0) + 1; }); } } fecha.setDate(fecha.getDate() + 1); } window.guardarBaseDeDatos(); location.reload(); } };
 document.getElementById('btn-confirm-save-template').addEventListener('click', () => { let isoLunes = document.getElementById('template-iso-lunes').value; let nombre = document.getElementById('input-template-name').value; if(!nombre) return alert("Ponle nombre"); let semanaData = []; let fecha = new Date(isoLunes + "T12:00:00"); for(let i=0; i<7; i++) { let currentISO = toLocalISO(fecha); semanaData.push(appDB.fechas[currentISO] ? JSON.parse(JSON.stringify(appDB.fechas[currentISO])) : null); fecha.setDate(fecha.getDate() + 1); } plantillasGuardadas[nombre] = semanaData; localStorage.setItem('atleti_templates_team', JSON.stringify(plantillasGuardadas)); document.getElementById('template-modal').classList.add('hidden'); alert("Guardada"); });
-
-// Registro de Service Worker para PWA
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').then(registration => {
-            console.log('ServiceWorker registration successful with scope: ', registration.scope);
-        }, err => {
-            console.log('ServiceWorker registration failed: ', err);
-        });
-    });
-}
