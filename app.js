@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ==========================================
-    // 7. EXPORTACIÓN A PDF - CÓDIGO ORIGINAL QUE FUNCIONA
+    // 7. EXPORTACIÓN A PDF (CALENDARIO)
     // ==========================================
     
     document.getElementById('btn-export-calendario').addEventListener('click', () => { 
@@ -731,24 +731,18 @@ document.addEventListener('DOMContentLoaded', () => {
         dFinCiclo.setDate(dFinCiclo.getDate() + (numSemanas * 7) - 1);
         let strFechas = `DEL ${fechaInicioIteracion.getDate()} DE ${mesesTexto[fechaInicioIteracion.getMonth()]} AL ${dFinCiclo.getDate()} DE ${mesesTexto[dFinCiclo.getMonth()]}`;
 
-        // --- PORTADA PREMIUM ESTABLE (COLOR SOLIDO) ---
+        // --- PORTADA MODIFICADA (FONDO AZUL CORPORATIVO Y ESCUDO CENTRADO) ---
         html += `
-        <div style="width: 297mm; height: 210mm; background-color: #003366; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; position: relative; overflow: hidden; page-break-after: always; box-sizing: border-box; text-align: center; border-bottom: 25px solid #CB3524;">
-            
-            <img src="ESCUDO_ATM.png" style="height: 220px; margin-bottom: 40px; z-index: 2;">
-            
-            <h1 style="font-size: 55px; font-weight: 900; margin: 0; letter-spacing: 3px; z-index: 2;">PLANIFICACIÓN METODOLÓGICA</h1>
-            
-            <div style="height: 5px; width: 150px; background-color: #FF9800; margin: 25px auto; z-index: 2;"></div>
-            
-            <h2 style="font-size: 28px; font-weight: 300; margin: 0; z-index: 2; color: #f0f0f0; letter-spacing: 5px;">METODOLOGY ATM</h2>
-            
-            <div style="margin-top: 50px; background-color: rgba(255, 255, 255, 0.1); padding: 15px 50px; border-radius: 50px; border: 2px solid rgba(255,255,255,0.3); z-index: 2;">
-                <span style="font-size: 24px; font-weight: bold; color: #FF9800; text-transform: uppercase; letter-spacing: 2px; display: block;">${txtCicloPortada}</span>
-                <span style="font-size: 15px; font-weight: bold; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; display: block;">${strFechas}</span>
+        <div style="width: 297mm; height: 210mm; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #003366; page-break-after: always; box-sizing: border-box; text-align: center; border-bottom: 25px solid #CB3524; color: white;">
+            <img src="ESCUDO_ATM.png" style="height: 220px; margin-bottom: 40px; object-fit: contain;">
+            <h1 style="font-size: 55px; font-weight: 900; margin: 0; color: white; text-transform: uppercase; letter-spacing: 1px;">PLANIFICACIÓN METODOLÓGICA</h1>
+            <div style="height: 5px; width: 120px; background-color: white; margin: 25px auto;"></div>
+            <h2 style="font-size: 28px; font-weight: 300; margin: 0; color: #f0f0f0; letter-spacing: 5px; text-transform: uppercase;">Metodology ATM</h2>
+            <div style="margin-top: 50px; background-color: rgba(255,255,255,0.1); padding: 15px 40px; border-radius: 40px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 24px; font-weight: bold; color: #FF9800; text-transform: uppercase;">${txtCicloPortada}</span>
+                <span style="font-size: 15px; font-weight: bold; color: white; text-transform: uppercase; letter-spacing: 1px; margin-top: 8px; display: block;">${strFechas}</span>
             </div>
-            
-            <p style="position: absolute; bottom: 30px; font-size: 13px; color: #aaaaaa; z-index: 2; font-weight: bold; letter-spacing: 1px;">ÁREA DE DESARROLLO METODOLÓGICO</p>
+            <p style="position: absolute; bottom: 35px; color: rgba(255,255,255,0.7); font-size: 14px; font-weight: bold;">ÁREA DE DESARROLLO</p>
         </div>
         `;
 
@@ -838,39 +832,19 @@ document.addEventListener('DOMContentLoaded', () => {
         
         html += `</div>`;
 
-        // Contenedor temporal: EL EXACTAMENTE MISMO MÉTODO QUE YA TE FUNCIONÓ
-        const element = document.createElement('div');
-        element.innerHTML = html;
-        element.style.position = 'absolute';
-        element.style.top = '0';
-        element.style.left = '0';
-        element.style.zIndex = '999998'; 
-        document.body.appendChild(element);
-
-        // CONFIGURACIÓN PREMIUM PARA PDF EXACTA A TU BACKUP
         const opciones = {
             margin:       0, 
-            filename:     `Planificacion_Elite_ATM.pdf`,
-            image:        { type: 'jpeg', quality: 1 },
+            filename:     `Planificacion_Premium_ATM.pdf`,
+            image:        { type: 'jpeg', quality: 0.98 },
             html2canvas:  { 
                 scale: 2, 
                 useCORS: true, 
-                letterRendering: true,
-                scrollY: 0
+                letterRendering: true
             }, 
             jsPDF:        { unit: 'mm', format: 'a4', orientation: 'landscape' }
         };
 
-        // Generar
-        setTimeout(() => {
-            html2pdf().set(opciones).from(element).save().then(() => {
-                document.body.removeChild(element);
-                mostrarAlerta("✅ Éxito", "El PDF se ha descargado correctamente.", false);
-            }).catch(err => {
-                document.body.removeChild(element);
-                mostrarAlerta("❌ Error", "Fallo al generar el documento PDF.", true);
-            });
-        }, 1500); 
+        html2pdf().set(opciones).from(html).save();
     });
 
     // 2. Exportar Gráficos
@@ -1040,12 +1014,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             });
 
-            const observer = new MutationObserver(() => {
-                renderOptions();
-                triggerText.textContent = select.options[select.selectedIndex]?.text || '';
-                wrapper.classList.toggle('disabled-wrapper', select.disabled);
-            });
-            observer.observe(select, { childList: true, attributes: true, attributeFilter: ['disabled'] });
+Mutator.observe(select, { childList: true, attributes: true, attributeFilter: ['disabled'] });
             
             wrapper.classList.toggle('disabled-wrapper', select.disabled);
         });
@@ -1072,7 +1041,7 @@ function renderMacrociclo() {
         for(let s = 0; s < numSemanas; s++) {
             let fechaSemana = new Date(currentLunes); fechaSemana.setDate(fechaSemana.getDate() + (s * 7)); let isoLunes = toLocalISO(fechaSemana);
             let claseFase = 'phase-comp'; if(monthIndex === 7) claseFase = 'phase-pre'; if(monthIndex === 11 && s > 2) claseFase = 'phase-break'; if(monthIndex === 5 && s > 1) claseFase = 'phase-break'; 
-            let numTareas = 0; for(let i=0; i<7; i++) { let d = new Date(fechaSemana); d.setDate(d.getDate()+i); let iso = toLocalISO(d); if(appDB.fechas[iso] && appDB.fechas[iso].tareas) numTareas += appDB.fechas[iso].tareas.length; }
+            let numTareas = 0; for(let i=0; i<7; i++) { d = new Date(fechaSemana); d.setDate(d.getDate()+i); let iso = toLocalISO(d); if(appDB.fechas[iso] && appDB.fechas[iso].tareas) numTareas += appDB.fechas[iso].tareas.length; }
             let heightBar = numTareas === 0 ? 5 : Math.min(100, (numTareas * 10));
             htmlSemanas += `<div class="gantt-week ${claseFase}" title="Ver Microciclo"><div class="gantt-tooltip">Micro ${fechaSemana.getDate()}/${fechaSemana.getMonth()+1}<br>${numTareas} Tareas</div><div class="gantt-bar" style="height: ${heightBar}px;"></div></div>`;
         }
@@ -1101,3 +1070,14 @@ let plantillasGuardadas = JSON.parse(localStorage.getItem('atleti_templates_team
 window.abrirModalPlantilla = function(isoLunes) { document.getElementById('template-iso-lunes').value = isoLunes; document.getElementById('input-template-name').value = ""; document.getElementById('template-modal').classList.remove('hidden'); };
 window.cargarPlantillaPrompt = function(isoLunesDestino) { let nombres = Object.keys(plantillasGuardadas); if(nombres.length === 0) return alert("Sin plantillas."); let msj = "NÚMERO de plantilla:\n"; nombres.forEach((n, i) => msj += `${i+1}. ${n}\n`); let seleccion = prompt(msj); if(seleccion && !isNaN(seleccion) && seleccion > 0 && seleccion <= nombres.length) { let nombreElegido = nombres[seleccion-1]; let semanaData = plantillasGuardadas[nombreElegido]; let fecha = new Date(isoLunesDestino + "T12:00:00"); for(let i=0; i<7; i++) { let currentISO = toLocalISO(fecha); if(semanaData[i]) { appDB.fechas[currentISO] = JSON.parse(JSON.stringify(semanaData[i])); if(appDB.fechas[currentISO].tareas) { appDB.fechas[currentISO].tareas.forEach(t => { appDB.statsBloques[t.bloqueID] = (appDB.statsBloques[t.bloqueID] || 0) + 1; appDB.statsGestos[t.gesto] = (appDB.statsGestos[t.gesto] || 0) + 1; }); } } fecha.setDate(fecha.getDate() + 1); } window.guardarBaseDeDatos(); location.reload(); } };
 document.getElementById('btn-confirm-save-template').addEventListener('click', () => { let isoLunes = document.getElementById('template-iso-lunes').value; let nombre = document.getElementById('input-template-name').value; if(!nombre) return alert("Ponle nombre"); let semanaData = []; let fecha = new Date(isoLunes + "T12:00:00"); for(let i=0; i<7; i++) { let currentISO = toLocalISO(fecha); semanaData.push(appDB.fechas[currentISO] ? JSON.parse(JSON.stringify(appDB.fechas[currentISO])) : null); fecha.setDate(fecha.getDate() + 1); } plantillasGuardadas[nombre] = semanaData; localStorage.setItem('atleti_templates_team', JSON.stringify(plantillasGuardadas)); document.getElementById('template-modal').classList.add('hidden'); alert("Guardada"); });
+
+// Registro de Service Worker para PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').then(registration => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+        }, err => {
+            console.log('ServiceWorker registration failed: ', err);
+        });
+    });
+}
